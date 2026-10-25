@@ -6,6 +6,7 @@ from decimal import Decimal
 import os
 
 from models import Car, CarFullInfo, CarStatus, Model, ModelSaleStats, Sale
+from pydantic import BaseModel
 
 
 class CarService:
@@ -41,63 +42,66 @@ class CarService:
 
     def create_file(self, path: str):
         '''
-        Создаем пустой файл.
+        Создаем пустой файл.\n
+        path: str Путь к файлу.
         '''
         with open(path, 'w', encoding='utf-8') as _:
             pass
 
+    def write_file(self, file: str, row: int, entity: BaseModel):
+        '''
+        Метод записи данных индексов и данных в файл.\n
+        file: str Путь к файлу для записи.\n
+        row: int Номер строки для записи.\n
+        entity: BaseModel Объект для записи.
+        '''
+        with open(file, 'r+', encoding='utf-8') as f:
+            f.seek(501 * (row - 1))
+            if 'index' in file:
+                f.write(f'{entity.idx()};{row}'.ljust(500) + '\n')
+            else:
+                f.write(entity.to_string().ljust(500) + '\n')
+
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
         '''
-            Метод добавляет новую модель.
+            Метод добавляет новую модель.\n
             model: Model Модель, которую добавляем.
         '''
         if model.index() in self.models_indexes:
             raise ValueError('duplicated id')
         row = max(self.models_indexes.values(), default=0) + 1
         self.models_indexes[model.id] = row
-        with open(self.models_index_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(f'{model.idx()};{row}'.ljust(500) + '\n')
-        with open(self.models_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(model.to_string().ljust(500) + '\n')
+        self.write_file(self.models_index_file, row, model)
+        self.write_file(self.models_file, row, model)
         return model
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_car(self, car: Car) -> Car:
         '''
-            Метод добавляет новую машину.
+            Метод добавляет новую машину.\n
             car: Car Машина, которую добавляем.
         '''
         if car.index() in self.cars_indexes:
             raise ValueError('duplicated vin')
         row = max(self.cars_indexes.values(), default=0) + 1
         self.cars_indexes[car.index()] = row
-        with open(self.cars_index_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(f'{car.idx()};{row}'.ljust(500) + '\n')
-        with open(self.cars_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(car.to_string().ljust(500) + '\n')
+        self.write_file(self.cars_index_file, row, car)
+        self.write_file(self.cars_file, row, car)
         return car
 
     # Задание 2. Сохранение продаж.
     def sell_car(self, sale: Sale) -> Car:
         '''
-        Фиксирует факт продажи автомобиля.
+        Фиксирует факт продажи автомобиля.\n
         sale: Sale Информация о продаже.
         '''
         if sale.index() not in self.cars_indexes:
             raise ValueError('VIN not in cars')
         row = max(self.sales_indexes.values(), default=0) + 1
         self.sales_indexes[sale.sales_number] = row
-        with open(self.sales_index_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(f'{sale.sales_number};{row}'.ljust(500) + '\n')
-        with open(self.sales_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(sale.to_string().ljust(500) + '\n')
+        self.write_file(self.sales_index_file, row, sale)
+        self.write_file(self.sales_file, row, sale)
         car_row = self.cars_indexes[sale.index()]
         with open(self.cars_file, 'r+', encoding='utf-8') as file:
             file.seek(501 * (car_row - 1))
@@ -116,7 +120,7 @@ class CarService:
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
         '''
-        Возвращает список машин с указанным статусом.
+        Возвращает список машин с указанным статусом.\n
         status : CarStatus Статус автомобиля.
         '''
         result = []
@@ -137,8 +141,8 @@ class CarService:
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
         '''
-        Возвращает информацию о авто, его марке и продаже.
-        Если авто не найдено, возвращает None.
+        Возвращает информацию о авто, его марке и продаже.\n
+        Если авто не найдено, возвращает None.\n
         vin : str VIN номер двигятеля авто.
         '''
         if vin in self.cars_indexes:
@@ -190,8 +194,8 @@ class CarService:
     # Задание 5. Обновление ключевого поля
     def update_vin(self, vin: str, new_vin: str) -> Car:
         '''
-        Обновляет VIN номер двигятеля.
-        vin : str VIN двигателя, который надо изменить.
+        Обновляет VIN номер двигятеля.\n
+        vin : str VIN двигателя, который надо изменить.\n
         new_vin : str Новое значение VIN.
         '''
         row = self.cars_indexes[vin]
@@ -209,15 +213,13 @@ class CarService:
             file.write(car.to_string().ljust(500) + '\n')
         self.cars_indexes.pop(vin)
         self.cars_indexes[new_vin] = row
-        with open(self.cars_index_file, 'r+', encoding='utf-8') as file:
-            file.seek(501 * (row - 1))
-            file.write(f'{new_vin};{row}'.ljust(500))
+        self.write_file(self.cars_index_file, row, car)
         return car
 
     # Задание 6. Удаление продажи
     def revert_sale(self, sales_number: str) -> Car:
         '''
-        Удаляет информацию о продаже и возвращает статус авто в available.
+        Удаляет информацию о продаже и возвращает статус авто в available.\n
         sales_number : str Номер продажи
         '''
         sale_row = self.sales_indexes[sales_number]
@@ -254,7 +256,7 @@ class CarService:
                 status=CarStatus.available
             )
             f.seek(501 * (car_row - 1))
-            f.write(car.to_string().ljust(500) + '\n')
+            f.write(car.to_string().ljust(500))
         return car
 
     # Задание 7. Самые продаваемые модели
@@ -289,7 +291,7 @@ class CarService:
             key=lambda item: (
                 item[1][0],
                 item[1][1] / item[1][0]
-            ), 
+            ),
             reverse=True
         )[:3]
         result: list[ModelSaleStats] = []
